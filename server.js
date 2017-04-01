@@ -1,4 +1,4 @@
-const request = require('request');
+const request = require('request-promise');
 const jsdom = require('jsdom');
 const Q = require('q');
 const dotenv = require('dotenv-safe');
@@ -22,22 +22,26 @@ const CONSTANTS = {
 };
 
 const edfLoginOptions = {
+  resolveWithFullResponse: true,
   uri: edfParticulierLoginUrl,
   method: 'POST',
   form: {},
 };
 
 const edfEquilibreStatusOptions = {
+  resolveWithFullResponse: true,
   uri: edfEquilibreStatusUrl,
   method: 'POST',
   headers: {},
 };
 
 const edfSsoOptions = {
+  resolveWithFullResponse: true,
   headers: {},
 };
 
 const edfSAMLOptions = {
+  resolveWithFullResponse: true,
   uri: edfSamlUrl,
   method: 'POST',
   followAllRedirects: true,
@@ -46,6 +50,7 @@ const edfSAMLOptions = {
 };
 
 const edfEquilibreOptions = {
+  resolveWithFullResponse: true,
   uri: edfEquilibreUrl,
   headers: {},
 };
@@ -63,7 +68,7 @@ edfLoginOptions.form = {
   password: process.env.EDF_PASSWORD,
 };
 
-Q.nfcall(request, edfLoginOptions)
+request(edfLoginOptions)
   .then(edfEquilibreStatusCall)
   .then(edfSsoCall)
   .then(edfSAMLCookie)
@@ -71,27 +76,27 @@ Q.nfcall(request, edfLoginOptions)
   .then(edfSamlCall)
   .then(edfEquilibreCall)
   .then((response) => {
-    handlerError(response[0], CONSTANTS.edfEquilibreRequestName);
+    handlerError(response, CONSTANTS.edfEquilibreRequestName);
 
-    console.log('MY CONSOMMATION response.headers', response[0].headers);
-    console.log('MY CONSOMMATION response.statusCode', response[0].statusCode);
-    console.log('MY CONSOMMATION', response[0].body);
+    console.log('MY CONSOMMATION response.headers', response.headers);
+    console.log('MY CONSOMMATION response.statusCode', response.statusCode);
+    console.log('MY CONSOMMATION', response.body);
   })
   .catch(err => console.log(err));
 
 function edfEquilibreStatusCall(response) {
-  handlerError(response[0], CONSTANTS.edfLoginRequestName);
+  handlerError(response, CONSTANTS.edfLoginRequestName);
 
-  requestCookies = response[0].headers['set-cookie'].join(';');
+  requestCookies = response.headers['set-cookie'].join(';');
   edfEquilibreStatusOptions.headers.cookie = requestCookies;
 
-  return Q.nfcall(request, edfEquilibreStatusOptions);
+  return request(edfEquilibreStatusOptions);
 }
 
 function edfSsoCall(response) {
-  handlerError(response[0], CONSTANTS.edfEquilibreStatusCall);
+  handlerError(response, CONSTANTS.edfEquilibreStatusCall);
 
-  const edfEquilibreStatusResponse = response[0].body;
+  const edfEquilibreStatusResponse = response.body;
 
   if (!edfEquilibreStatusResponse.isActiveEquilibre ||
       !edfEquilibreStatusResponse.isEquilibreServiceSubscribed ||
@@ -102,16 +107,16 @@ function edfSsoCall(response) {
   edfSsoOptions.uri = edfEquilibreStatusResponse.edeliaURL.replace(':443', '');
   edfSsoOptions.headers.cookie = requestCookies;
 
-  return Q.nfcall(request, edfSsoOptions);
+  return request(edfSsoOptions);
 }
 
 function edfSAMLCookie(response) {
-  handlerError(response[0], CONSTANTS.edfSsoRequestName);
+  handlerError(response, CONSTANTS.edfSsoRequestName);
 
-  requestCookies = `${requestCookies};${response[0].headers['set-cookie'].join(';')}`;
+  requestCookies = `${requestCookies};${response.headers['set-cookie'].join(';')}`;
   edfSAMLOptions.headers.cookie = requestCookies;
 
-  return response[0].body;
+  return response.body;
 }
 
 function setSAMLResponse(body) {
@@ -121,25 +126,25 @@ function setSAMLResponse(body) {
 function edfSamlCall(window) {
   edfSAMLOptions.form.SAMLResponse = window.$("input[name='SAMLResponse']").val();
 
-  return Q.nfcall(request, edfSAMLOptions);
+  return request(edfSAMLOptions);
 }
 
 function edfEquilibreCall(response) {
-  handlerError(response[0], CONSTANTS.edfSamlRequestName);
-  const queries = parseUrl(response[0].request.uri.hash);
+  handlerError(response, CONSTANTS.edfSamlRequestName);
+  const queries = parseUrl(response.request.uri.hash);
 
   edfEquilibreOptions.headers.cookie = requestCookies;
   edfEquilibreOptions.headers.Authorization = `Bearer ${queries.t}`;
 
-  return Q.nfcall(request, edfEquilibreOptions);
+  return request(edfEquilibreOptions);
 }
 
 function parseUrl(hash) {
   const HashKeyValueParsed = {};
 
   hash.substring(CONSTANTS.edfEquilibreBaseHash.length).split('&').forEach((x) => {
-    const arr = x.split('=');
-    return arr[1] && (HashKeyValueParsed[arr[0]] = arr[1]);
+    const params = x.split('=');
+    return params[1] && (HashKeyValueParsed[params[0]] = params[1]);
   });
 
   return HashKeyValueParsed;
